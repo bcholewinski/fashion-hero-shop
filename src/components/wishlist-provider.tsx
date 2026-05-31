@@ -1,33 +1,103 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useCallback, useSyncExternalStore } from "react";
 
 interface WishlistContextType {
   wishlistItems: string[];
+  favoriteSellerIds: string[];
   toggleWishlist: (productId: string) => void;
   isWishlisted: (productId: string) => boolean;
+  toggleFavoriteSeller: (sellerId: string) => void;
+  isFavoriteSeller: (sellerId: string) => boolean;
 }
 
 const WishlistContext = createContext<WishlistContextType | null>(null);
 
 const STORAGE_KEY = "stepforward-wishlist";
+const SELLERS_STORAGE_KEY = "stepforward-favorite-sellers";
+const WISHLIST_CHANGE_EVENT = "stepforward-wishlist-change";
+const EMPTY_ITEMS: string[] = [];
 
-function loadWishlist(): string[] {
+let wishlistCacheKey: string | null = null;
+let wishlistCache: string[] = [];
+let favoriteSellerCacheKey: string | null = null;
+let favoriteSellerCache: string[] = [];
+
+function parseStorageItems(value: string | null): string[] {
+  if (!value) return [];
   try {
-    if (typeof window === "undefined") return [];
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+      ? parsed
+      : [];
   } catch {
     return [];
   }
 }
 
+function readStorageItems(storageKey: string, cache: "wishlist" | "sellers"): string[] {
+  if (typeof window === "undefined") return [];
+
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(storageKey);
+  } catch {
+    return [];
+  }
+
+  if (cache === "wishlist") {
+    if (stored !== wishlistCacheKey) {
+      wishlistCacheKey = stored;
+      wishlistCache = parseStorageItems(stored);
+    }
+    return wishlistCache;
+  }
+
+  if (stored !== favoriteSellerCacheKey) {
+    favoriteSellerCacheKey = stored;
+    favoriteSellerCache = parseStorageItems(stored);
+  }
+  return favoriteSellerCache;
+}
+
+function loadWishlist(): string[] {
+  return readStorageItems(STORAGE_KEY, "wishlist");
+}
+
 function saveWishlist(items: string[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(WISHLIST_CHANGE_EVENT));
   } catch {
     // localStorage unavailable
   }
+}
+
+function loadFavoriteSellers(): string[] {
+  return readStorageItems(SELLERS_STORAGE_KEY, "sellers");
+}
+
+function saveFavoriteSellers(items: string[]) {
+  try {
+    localStorage.setItem(SELLERS_STORAGE_KEY, JSON.stringify(items));
+    window.dispatchEvent(new Event(WISHLIST_CHANGE_EVENT));
+  } catch {
+    // localStorage unavailable
+  }
+}
+
+function subscribeToWishlist(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(WISHLIST_CHANGE_EVENT, callback);
+
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(WISHLIST_CHANGE_EVENT, callback);
+  };
+}
+
+function getServerSnapshot(): string[] {
+  return EMPTY_ITEMS;
 }
 
 export function useWishlist() {
@@ -37,20 +107,23 @@ export function useWishlist() {
 }
 
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
-  const [wishlistItems, setWishlistItems] = useState<string[]>([]);
-
-  useEffect(() => {
-    setWishlistItems(loadWishlist());
-  }, []);
+  const wishlistItems = useSyncExternalStore(
+    subscribeToWishlist,
+    loadWishlist,
+    getServerSnapshot
+  );
+  const favoriteSellerIds = useSyncExternalStore(
+    subscribeToWishlist,
+    loadFavoriteSellers,
+    getServerSnapshot
+  );
 
   const toggleWishlist = useCallback((productId: string) => {
-    setWishlistItems((prev) => {
-      const next = prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId];
-      saveWishlist(next);
-      return next;
-    });
+    const current = loadWishlist();
+    const next = current.includes(productId)
+      ? current.filter((id) => id !== productId)
+      : [...current, productId];
+    saveWishlist(next);
   }, []);
 
   const isWishlisted = useCallback(
@@ -58,8 +131,30 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     [wishlistItems]
   );
 
+  const toggleFavoriteSeller = useCallback((sellerId: string) => {
+    const current = loadFavoriteSellers();
+    const next = current.includes(sellerId)
+      ? current.filter((id) => id !== sellerId)
+      : [...current, sellerId];
+    saveFavoriteSellers(next);
+  }, []);
+
+  const isFavoriteSeller = useCallback(
+    (sellerId: string) => favoriteSellerIds.includes(sellerId),
+    [favoriteSellerIds]
+  );
+
   return (
-    <WishlistContext.Provider value={{ wishlistItems, toggleWishlist, isWishlisted }}>
+    <WishlistContext.Provider
+      value={{
+        wishlistItems,
+        favoriteSellerIds,
+        toggleWishlist,
+        isWishlisted,
+        toggleFavoriteSeller,
+        isFavoriteSeller,
+      }}
+    >
       {children}
     </WishlistContext.Provider>
   );

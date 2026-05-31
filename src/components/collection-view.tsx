@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { FilterSidebar, type GenderFilter, type PriceRange } from "@/components/filter-sidebar";
 import { ProductCard } from "@/components/product-card";
 import { ChevronDownIcon, CloseIcon } from "@/components/icons";
+import { FavoriteSellerButton } from "@/components/favorite-seller-button";
 import type { Product, ShoeType, ShoeMaterial } from "@/types";
 import { getSeller } from "@/data/sellers";
 
@@ -217,20 +218,60 @@ export function CollectionView({ products, collectionName, initialSellerSlug }: 
             if (!activeSeller) return null;
             const sellerProductCount = products.filter((p) => p.sellerId === activeSeller.id).length;
             return (
-              <div className="mb-6 p-4 bg-cream-light rounded-lg flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-charcoal">{activeSeller.name}</h3>
-                  <p className="text-[11px] text-warm-gray mt-0.5">
-                    {sellerProductCount} products · Joined {activeSeller.joinedYear}
-                    {activeSeller.rating > 0 && ` · ${activeSeller.rating} rating`}
-                  </p>
+              <div className="mb-6 rounded-lg bg-cream-light p-4 md:p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="flex gap-4">
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-[15px] font-medium text-charcoal">
+                      {activeSeller.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-medium text-charcoal">{activeSeller.name}</h3>
+                        {activeSeller.rating >= 4.5 && (
+                          <span className="rounded bg-charcoal/10 px-2 py-1 text-[9px] font-medium uppercase tracking-wide text-charcoal/70">
+                            Pro
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 max-w-2xl text-[13px] leading-5 text-warm-gray">
+                        {activeSeller.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 md:items-end">
+                    <FavoriteSellerButton sellerId={activeSeller.id} />
+                    <button
+                      onClick={() => setSellerSlugs([])}
+                      className="text-left text-[11px] text-warm-gray underline transition-colors hover:text-charcoal md:text-right"
+                    >
+                      View all sellers
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setSellerSlugs([])}
-                  className="text-[11px] text-warm-gray underline hover:text-charcoal transition-colors"
-                >
-                  View all sellers
-                </button>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4 sm:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.6px] text-warm-gray">
+                      Products
+                    </p>
+                    <p className="mt-0.5 text-sm text-charcoal">{sellerProductCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.6px] text-warm-gray">
+                      Rating
+                    </p>
+                    <p className="mt-0.5 text-sm text-charcoal">
+                      {activeSeller.rating > 0 ? `${activeSeller.rating} / 5` : "New seller"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.6px] text-warm-gray">
+                      Joined
+                    </p>
+                    <p className="mt-0.5 text-sm text-charcoal">{activeSeller.joinedYear}</p>
+                  </div>
+                </div>
               </div>
             );
           })()}
